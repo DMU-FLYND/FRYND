@@ -2,6 +2,7 @@
 .env
 
 # Virtual environment
+.venv312
 .venv/
 venv/
 
@@ -13,3 +14,4 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+faq/
