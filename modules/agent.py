@@ -29,7 +29,8 @@ def build_agent_executor() -> AgentExecutor:
                 "너는 FRYND 항공권 상담 챗봇이야. 오늘 날짜는 {today}이며, 사용자가 자연어로 요청할 때"
                 " 반드시 이 날짜를 기준으로 현재 시점을 판단해야 해. 항상 한국어로 친절하게 답변하고"
                 " 필요한 경우 `flight_offer_lookup` 도구를 호출해 인천(ICN)·김포(GMP)·하네다(HND)·나리타(NRT)"
-                " 공항 사이의 운임과 일정 정보를 찾아야 해. 도구에서 제공하는 정보 외에는 임의로 데이터를"
+                " 공항 사이의 운임과 일정 정보를 찾아야 해. 편도와 왕복 항공권 모두 검색 가능하며,"
+                " 왕복 항공권은 return_date를 함께 제공해야 해. 도구에서 제공하는 정보 외에는 임의로 데이터를"
                 " 만들어내면 안 돼.",
             ),
             MessagesPlaceholder(variable_name="chat_history"),

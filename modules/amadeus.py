@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 from amadeus import Client, ResponseError
 from pydantic import BaseModel, Field
 
-from .constants import AIRPORTS
+from .constants import AIRPORTS, AIRLINES
 
 
 class FlightSearchInput(BaseModel):
@@ -30,6 +30,10 @@ class FlightSearchInput(BaseModel):
         ...,
         description="출발일 (YYYY-MM-DD).",
     )
+    return_date: str | None = Field(
+        None,
+        description="귀국일 (YYYY-MM-DD). 왕복 항공권 검색 시 필수. 편도는 None.",
+    )
     adults: int = Field(
         1,
         ge=1,
@@ -38,7 +42,7 @@ class FlightSearchInput(BaseModel):
     )
 
 
-def flight_search_tool(origin: str, destination: str, departure_date: str, adults: int = 1) -> str:
+def flight_search_tool(origin: str, destination: str, departure_date: str, adults: int = 1, return_date: str | None = None) -> str:
     """LangChain tool wrapper for the Amadeus flight search."""
 
     try:
@@ -50,13 +54,19 @@ def flight_search_tool(origin: str, destination: str, departure_date: str, adult
             raise ValueError("탑승객 수는 1명 이상 9명 이하로 입력해 주세요.")
 
         departure = _parse_departure_date(departure_date)
-        offers = _search_flights(origin_code, destination_code, departure, adults)
+        return_dt = _parse_departure_date(return_date) if return_date else None
+        
+        if return_dt and return_dt <= departure:
+            raise ValueError("귀국일은 출발일 이후여야 합니다.")
+        
+        offers = _search_flights(origin_code, destination_code, departure, adults, return_dt)
         summary, table = _prepare_offer_response(
             offers,
             origin_code,
             destination_code,
             departure,
             adults,
+            return_dt,
         )
         payload = {"summary": summary, "table": table}
     except ValueError as error:
@@ -112,17 +122,22 @@ def _get_amadeus_client() -> Client:
     return _cached_amadeus_client(client_id, client_secret, hostname)
 
 
-def _search_flights(origin: str, destination: str, departure_date: date, adults: int) -> List[Dict[str, Any]]:
+def _search_flights(origin: str, destination: str, departure_date: date, adults: int, return_date: date | None = None) -> List[Dict[str, Any]]:
     client = _get_amadeus_client()
     try:
-        response = client.shopping.flight_offers_search.get(
-            originLocationCode=origin,
-            destinationLocationCode=destination,
-            departureDate=departure_date.strftime("%Y-%m-%d"),
-            adults=adults,
-            currencyCode="KRW",
-            max=5,
-        )
+        params = {
+            "originLocationCode": origin,
+            "destinationLocationCode": destination,
+            "departureDate": departure_date.strftime("%Y-%m-%d"),
+            "adults": adults,
+            "currencyCode": "KRW",
+            "max": 5,
+        }
+        
+        if return_date:
+            params["returnDate"] = return_date.strftime("%Y-%m-%d")
+        
+        response = client.shopping.flight_offers_search.get(**params)
     except ResponseError as error:
         parsed = _format_amadeus_error(error)
         raise RuntimeError(parsed) from error
@@ -136,9 +151,15 @@ def _prepare_offer_response(
     destination: str,
     departure_date: date,
     adults: int,
+    return_date: date | None = None,
 ) -> Tuple[str, List[Dict[str, str]] | None]:
+    trip_type = "왕복" if return_date else "편도"
+    date_info = f"{departure_date.strftime('%Y-%m-%d')}"
+    if return_date:
+        date_info += f" ~ {return_date.strftime('%Y-%m-%d')}"
+    
     header = (
-        f"{AIRPORTS[origin]} → {AIRPORTS[destination]} ({departure_date.strftime('%Y-%m-%d')}, {adults}명)\n"
+        f"{AIRPORTS[origin]} → {AIRPORTS[destination]} ({trip_type}, {date_info}, {adults}명)\n"
         "상위 5개 옵션을 보여드릴게요."
     )
 
@@ -182,7 +203,11 @@ def _offer_to_row(index: int, offer: Dict[str, Any]) -> Dict[str, str]:
     stop_count = len(segments) - 1
     stop_text = "직항" if stop_count == 0 else f"경유 {stop_count}회"
     duration = _humanize_duration(itinerary.get("duration", ""))
-    airline = first_segment.get("carrierCode", "알수없음")
+    
+    # 항공사 코드를 한국어 이름으로 표시
+    carrier_code = first_segment.get("carrierCode", "")
+    airline = AIRLINES.get(carrier_code, carrier_code) if carrier_code else "알수없음"
+    
     flight_numbers = ", ".join(
         f"{seg.get('carrierCode', '')}{seg.get('number', '')}".strip()
         for seg in segments
