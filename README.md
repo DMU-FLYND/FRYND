@@ -7,7 +7,11 @@ FRYND는 항공권 검색, 항공사별 FAQ, 기내식 정보를 **하나의 통
 - **통합 대화 라우팅:** 한 입력창에서 항공권·FAQ·기내식 질문을 받으면 키워드 기반으로 자동 분기해 가장 적합한 툴을 호출합니다.
 - **실시간 항공권 탐색:** Amadeus API로 ICN·GMP·HND·NRT 구간의 편도/왕복 운임을 조회하고 표 형태로 응답합니다.
 - **FAQ & 기내식 RAG:** 항공사 FAQ JSON과 `about_airline_meal.pdf`를 ChromaDB + Gemini 임베딩으로 인덱싱해 정답을 생성합니다.
-- **AI 음성 합성:** 어시스턴트 답변마다 🔊 버튼을 제공하며, Gemini 2.5 Flash TTS 프리뷰 모델을 우선 사용하고 실패 시 gTTS로 폴백합니다.
+- **🎙️ 실시간 음성 대화 (NEW!):** OpenAI Realtime API를 사용한 양방향 음성 대화 지원
+  - 텍스트 입력 또는 오디오 파일 업로드로 질문
+  - AI가 자연스러운 음성으로 실시간 응답
+  - OpenAI Whisper를 통한 정확한 음성 인식
+- **AI 음성 합성:** OpenAI TTS API로 자연스러운 한국어 음성 출력 (기존 텍스트 챗봇에서도 사용 가능)
 - **Streamlit UI:** 반응형 레이아웃, 사이드바 필터, 표/오디오 출력 등 여행 상담에 특화된 UX를 제공합니다.
 
 ## 🛠️ 기술 스택
@@ -25,11 +29,12 @@ FRYND/
 ├── main.py                  # Streamlit 진입점 (unified chatbot)
 ├── modules/
 │   ├── unified_chat_ui.py   # 항공권/FAQ/기내식 통합 UI & 라우팅
+│   ├── realtime_voice.py    # OpenAI Realtime API 기반 양방향 음성 대화
 │   ├── agent.py             # LangChain 도구 기반 항공권 에이전트
 │   ├── amadeus.py           # Amadeus API 호출 및 응답 정규화
 │   ├── faq_rag.py           # FAQ RAG 파이프라인 및 Chroma 관리
 │   ├── meal_rag.py          # 기내식 PDF RAG 파이프라인
-│   ├── tts_helper.py        # Gemini/gTTS TTS 헬퍼
+│   ├── tts_helper.py        # OpenAI TTS 헬퍼
 │   ├── constants.py         # 공항/항공사 레퍼런스 정보
 │   └── ...
 ├── data/
@@ -47,9 +52,11 @@ FRYND/
 ## ⚙️ 동작 구성요소
 
 - `modules/unified_chat_ui.py`: 세션 상태와 사이드바 필터를 관리하고, 입력을 **항공권 / 기내식 / FAQ**로 분류합니다.
+- `modules/unified_chat_ui.py`: 세션 상태와 사이드바 필터를 관리하고, 입력을 **항공권 / 기내식 / FAQ**로 분류합니다.
+- `modules/realtime_voice.py`: OpenAI Realtime API를 사용한 실시간 양방향 음성 대화 구현. 음성 입력(Whisper) 및 음성 출력(TTS) 지원.
 - `modules/agent.py`: Gemini LLM + LangChain 도구 호출 에이전트. `flight_offer_lookup` 도구를 통해 Amadeus 데이터를 받아 표 형태로 변환합니다.
 - `modules/faq_rag.py` & `modules/meal_rag.py`: Gemini 임베딩으로 ChromaDB 인덱스를 구축/갱신하고, 문맥 기반 답변을 생성합니다.
-- `modules/tts_helper.py`: Google `google-genai` 클라이언트와 gTTS를 결합한 음성 합성 출력.
+- `modules/tts_helper.py`: OpenAI TTS API를 사용한 음성 합성 출력 (gTTS 폴백 포함).
 
 ## 🚀 시작하기
 
@@ -82,12 +89,14 @@ pip install -r requirements.txt
 
 | 변수 | 필수 | 설명 |
 | --- | --- | --- |
-| `GOOGLE_API_KEY` | ✅ | Gemini Chat/RAG/TTS에 사용되는 API 키 |
+| `GOOGLE_API_KEY` | ✅ | Gemini Chat/RAG에 사용되는 API 키 |
+| `OPENAI_API_KEY` | ✅ | OpenAI TTS 및 Realtime API에 사용되는 API 키 |
 | `AMADEUS_CLIENT_ID` | ✅ | Amadeus Flight Offers Search 클라이언트 ID |
 | `AMADEUS_CLIENT_SECRET` | ✅ | Amadeus 클라이언트 시크릿 |
 | `AMADEUS_HOSTNAME` | ⛔️ | 기본 `test`. 실서비스 전환 시 `production`으로 변경 |
-| `GEMINI_TTS_MODEL` | ⛔️ | 기본 `gemini-2.5-flash-preview-tts` |
-| `GEMINI_TTS_VOICE` | ⛔️ | 기본 `Kore`. 다른 사전 구성 음성 이름으로 교체 가능 |
+| `OPENAI_TTS_MODEL` | ⛔️ | 기본 `tts-1`. 고품질은 `tts-1-hd` 사용 가능 |
+| `OPENAI_TTS_VOICE` | ⛔️ | 기본 `alloy`. 다른 옵션: echo, fable, onyx, nova, shimmer |
+| `OPENAI_REALTIME_VOICE` | ⛔️ | Realtime API 음성. 기본 `alloy` |
 
 ### 4. 실행
 
